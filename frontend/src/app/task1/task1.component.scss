@@ -1,0 +1,40 @@
+.task1-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.task-description {
+  color: #666;
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.message {
+  margin-bottom: 1rem;
+  border: 0.5px solid gray;
+  padding: 1rem 1rem 2rem;
+  transition: background-color 0.2s ease;
+  border-radius: .8rem;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .lighter {
+    font-weight: lighter;
+  }
+
+  .content {
+    margin-left: 0.5rem;
+  }
+
+  .time {
+    font-size: 0.8rem;
+    float: right;
+  }
+}
+.message:hover {
+  background-color: #eaeaea;
+}

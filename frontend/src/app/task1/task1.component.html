@@ -1,0 +1,31 @@
+<div class="task1-container">
+  <h2>Task 1: Workspace Chat Messages Display</h2>
+  <p class="task-description">
+    Fetch and display workspace chat messages from the API. Show messages in a
+    simple list with author name, content, timestamp, and message type.
+  </p>
+  <!-- TODO: Implement the messages display here -->
+  @if (workspaces$ | async; as workspaces) {
+    @if (!workspaces.success) {
+      <div class="error">Error happened</div>
+    }
+
+    @for (workspace of workspaces.data; track workspace._id) {
+      <div class="message">
+        <div class="header">
+          <strong>{{ workspace.author.name }}</strong>
+          <h4>
+            Type: <span class="lighter">{{ workspace.type }}</span>
+          </h4>
+        </div>
+
+        <p class="content">{{ workspace.content }}</p>
+        <h3 class="time">
+          Date: <span class="lighter">{{ workspace.createdAt | date:'short'}}</span>
+        </h3>
+      </div>
+    }
+  } @else {
+    <div class="loading">Loading messages…</div>
+  }
+</div>
