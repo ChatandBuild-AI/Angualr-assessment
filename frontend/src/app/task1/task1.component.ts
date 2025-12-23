@@ -1,51 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
-// Optional: You can use the MessageService from services/message.service.ts instead of HttpClient directly
-// import { MessageService, Message } from '../services/message.service';
-// import { WorkspaceService, Workspace } from '../services/workspace.service';
-
-// ⚠️ CRITICAL WARNING: DO NOT USE AI TOOLS
-// This assessment must be completed WITHOUT using AI tools such as Cursor, ChatGPT, 
-// GitHub Copilot, or any other AI coding assistants.
-// If you use AI tools to complete this assessment, you will FAIL.
-
-// TODO: Task 1 - Implement this component
-// Requirements:
-// 1. Fetch workspace messages from the API endpoint: GET /api/workspaces/:workspaceId/messages
-//    - You can use a hardcoded workspace ID (e.g., get the first workspace from /api/workspaces)
-// 2. Display messages in a simple list format
-// 3. Each message should show:
-//    - Message content
-//    - Author name
-//    - Timestamp (formatted date/time)
-//    - Message type (text, file, system)
-// 4. Add loading state while fetching data
-// 5. Handle error states (show error message if API call fails)
-// 6. Add basic styling to make it look clean and readable
-//
-// Note: MessageService and WorkspaceService are available in services/ if you prefer to use them
-
-interface Message {
-  _id: string;
-  workspaceId: string;
-  content: string;
-  author: {
-    name: string;
-    userId?: string;
-    avatar?: string;
-  };
-  type: 'text' | 'file' | 'system';
-  createdAt: string;
-  isEdited?: boolean;
-}
-
-interface Workspace {
-  _id: string;
-  name: string;
-  description?: string;
-  type: 'public' | 'private';
-}
+import { MessageService, Message } from '../services/message.service';
+import { WorkspaceService } from '../services/workspace.service';
+import { forkJoin } from 'rxjs';
 
 @Component({
   selector: 'app-task1',
@@ -59,54 +16,233 @@ interface Workspace {
         Show messages in a simple list with author name, content, timestamp, and message type.
       </p>
       
-      <!-- TODO: Implement the messages display here -->
-      <div class="placeholder">
-        <p>Your implementation goes here...</p>
-        <p class="hint">Display messages in a list format showing: content, author name, timestamp, and message type.</p>
+      <div *ngIf="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading messages...</p>
+      </div>
+
+      <div *ngIf="error && !loading" class="error-state">
+        <p class="error-message">{{ error }}</p>
+        <button (click)="loadMessages()" class="retry-button">Retry</button>
+      </div>
+
+      <div *ngIf="!loading && !error && messages.length > 0" class="messages-info">
+        <h3>All Messages</h3>
+        <p class="messages-count">
+          Showing {{ (currentPage - 1) * itemsPerPage + 1 }} - {{ getEndIndex() }} of {{ messages.length }} message{{ messages.length !== 1 ? 's' : '' }}
+        </p>
+      </div>
+
+      <div *ngIf="!loading && !error" class="messages-container">
+        <div *ngIf="messages.length === 0 && !loading" class="empty-state">
+          <p>No messages found.</p>
+        </div>
+        
+        <div *ngIf="messages.length > 0" class="messages-list">
+          <div *ngFor="let message of paginatedMessages" class="message-item" [class.system]="message.type === 'system'" [class.file]="message.type === 'file'">
+            <div class="message-header">
+              <span class="author-name">{{ message.author.name }}</span>
+              <span class="message-type-badge" [class.type-text]="message.type === 'text'" 
+                    [class.type-file]="message.type === 'file'" 
+                    [class.type-system]="message.type === 'system'">
+                {{ message.type }}
+              </span>
+             
+              <span class="timestamp">{{ formatTimestamp(message.createdAt) }}</span>
+              <span *ngIf="message.isEdited" class="edited-badge">(edited)</span>
+            </div>
+            <div class="message-content">{{ message.content }}</div>
+          </div>
+        </div>
+
+        <div *ngIf="messages.length > 0 && totalPages > 1" class="pagination">
+          <button 
+            (click)="goToPage(currentPage - 1)" 
+            [disabled]="currentPage === 1"
+            class="pagination-button"
+            [class.disabled]="currentPage === 1"
+          >
+            Previous
+          </button>
+          
+          <div class="page-numbers">
+            <span 
+              *ngFor="let page of getPageNumbers()" 
+              (click)="handlePageClick(page)"
+              class="page-number"
+              [class.active]="page === currentPage"
+              [class.ellipsis]="page === '...'"
+            >
+              {{ page }}
+            </span>
+          </div>
+          
+          <button 
+            (click)="goToPage(currentPage + 1)" 
+            [disabled]="currentPage === totalPages"
+            class="pagination-button"
+            [class.disabled]="currentPage === totalPages"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   `,
-  styles: [`
-    .task1-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 1rem;
-    }
-    .task-description {
-      color: #666;
-      margin-bottom: 2rem;
-      line-height: 1.6;
-    }
-    .placeholder {
-      padding: 3rem;
-      text-align: center;
-      background: #f5f5f5;
-      border-radius: 8px;
-      color: #999;
-    }
-    .hint {
-      font-size: 0.9rem;
-      margin-top: 1rem;
-      color: #aaa;
-    }
-  `]
+  styleUrls: ['./task1.component.css']
 })
 export class Task1Component implements OnInit {
-  // TODO: Add your implementation here
-  // Suggested properties:
-  // - messages: Message[] = [];
-  // - workspace: Workspace | null = null;
-  // - loading: boolean = false;
-  // - error: string | null = null;
-  // - currentPage: number = 1;
-  // - hasMore: boolean = true;
+  messages: Message[] = [];
+  paginatedMessages: Message[] = [];
+  loading: boolean = false;
+  error: string | null = null;
+  currentPage: number = 1;
+  itemsPerPage: number = 3;
+  totalPages: number = 0;
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private messageService: MessageService,
+    private workspaceService: WorkspaceService
+  ) { }
 
   ngOnInit() {
-    // TODO: 
-    // 1. Fetch a workspace (or use a hardcoded ID)
-    // 2. Fetch messages for that workspace
-    // 3. Handle loading and error states
+    this.loadMessages();
+  }
+
+  loadMessages() {
+    this.loading = true;
+    this.error = null;
+    this.workspaceService.getAllWorkspaces({ page: 1, limit: 1000 }).subscribe({
+      next: (workspaceResponse) => {
+        if (workspaceResponse.success && workspaceResponse.data.length > 0) {
+          const workspaces = workspaceResponse.data;
+          
+          const messageRequests = workspaces.map(workspace => 
+            this.messageService.getWorkspaceMessages(workspace._id, { limit: 1000 })
+          );
+
+          forkJoin(messageRequests).subscribe({
+            next: (messageResponses) => {
+              this.loading = false;
+              
+              const allMessages: Message[] = [];
+              messageResponses.forEach(response => {
+                if (response.success && response.data) {
+                  allMessages.push(...response.data);
+                }
+              });
+
+                this.messages = allMessages.sort((a, b) => {
+                  const dateA = new Date(a.createdAt).getTime();
+                  const dateB = new Date(b.createdAt).getTime();
+                  return dateA - dateB;
+                });
+                
+                this.updatePagination();
+            },
+            error: (err) => {
+              this.loading = false;
+              this.error = err.error?.error || 'Failed to load messages. Please try again.';
+              console.error('Error loading messages:', err);
+            }
+          });
+        } else {
+          this.loading = false;
+          this.error = 'No workspaces found.';
+        }
+      },
+      error: (err) => {
+        this.loading = false;
+        this.error = err.error?.error || 'Failed to load workspaces. Please check your connection.';
+        console.error('Error loading workspaces:', err);
+      }
+    });
+  }
+
+  updatePagination(): void {
+    this.totalPages = Math.ceil(this.messages.length / this.itemsPerPage);
+    const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+    const endIndex = startIndex + this.itemsPerPage;
+    this.paginatedMessages = this.messages.slice(startIndex, endIndex);
+  }
+
+  handlePageClick(page: number | string): void {
+    if (typeof page === 'number') {
+      this.goToPage(page);
+    }
+  }
+
+  goToPage(page: number): void {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+      this.updatePagination();
+      const messagesContainer = document.querySelector('.messages-container');
+      if (messagesContainer) {
+        messagesContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }
+
+  getPageNumbers(): (number | string)[] {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+    
+    if (this.totalPages <= maxVisible) {
+      for (let i = 1; i <= this.totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      if (this.currentPage > 3) {
+        pages.push('...');
+      }
+      const start = Math.max(2, this.currentPage - 1);
+      const end = Math.min(this.totalPages - 1, this.currentPage + 1);
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      
+      if (this.currentPage < this.totalPages - 2) {
+        pages.push('...');
+      }
+      
+      pages.push(this.totalPages);
+    }
+    
+    return pages;
+  }
+
+  getEndIndex(): number {
+    const end = this.currentPage * this.itemsPerPage;
+    return end > this.messages.length ? this.messages.length : end;
+  }
+
+  formatTimestamp(timestamp: string): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) {
+      return 'Just now';
+    } else if (diffMins < 60) {
+      return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else {
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
   }
 }
